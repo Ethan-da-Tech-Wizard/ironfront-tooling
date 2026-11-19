@@ -22,6 +22,8 @@ except ImportError:
     e = None
 
 # Hardware key codes registered to the virtual uinput device
+# These ecodes define the input capability bitmask advertised to the Linux kernel.
+# The kernel creates a virtual character device (/dev/input/eventX) matching these specs.
 if e:
     keys = [
         e.KEY_ENTER, e.KEY_ESC, e.KEY_W, e.KEY_A, e.KEY_S, e.KEY_D,
@@ -33,7 +35,23 @@ else:
     keys = []
 
 def run_playtest():
-    """Parses command-line action arguments and delivers hardware inputs to uinput device."""
+    """
+    Parses command-line action arguments and delivers hardware inputs to the uinput device.
+    
+    Architecture & Kernel Invariants:
+      1. Virtual Device Initialization:
+         Registers an unprivileged user-space input device with EV_KEY (keys/buttons)
+         and EV_REL (relative axes: X, Y, WHEEL) capabilities.
+      2. Event Synchronization (SYN_REPORT):
+         Linux input devices batch changes. Emitting EV_KEY or EV_REL alone does not
+         deliver events to consumers until device.syn() generates an EV_SYN packet.
+         This guarantees that multi-axis movements or chorded key strokes arrive
+         in a single atomic input frame in the game engine loop.
+      3. Action Grammar:
+         - 'wait:<seconds>'    : Sleep pause between sequential test steps.
+         - 'move:<x>,<y>'      : Relative mouse delta injection for aim/camera control.
+         - '<key>[:<duration>]': Keydown -> wait -> keyup state cycle with hardware debounce.
+    """
     if not UInput or not e:
         print("evdev module required for live hardware input injection (Linux uinput environment).")
         return
